@@ -1,3 +1,7 @@
+// PMTUD
+//
+// Copyright (c) 2015 CloudFlare, Inc.
+
 #define ERRORF(x...) fprintf(stderr, x)
 
 #define FATAL(x...)                                                            \
@@ -42,3 +46,4 @@ pcap_t *setup_pcap(const char *iface, const char *bpf_filter, int snap_len,
 		   struct pcap_stat *stats);
 void unsetup_pcap(pcap_t *pcap, const char *iface, struct pcap_stat *stats);
 int setup_raw(const char *iface);
+const char *ip_to_string(const uint8_t *p, int p_len);

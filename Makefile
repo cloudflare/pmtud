@@ -32,7 +32,8 @@ all: pmtud
 
 pmtud: libpcap.a src/*.c src/*.h Makefile
 	$(CC) $(COPTS) \
-		src/main.c src/utils.c src/pcap.c src/uevent.c \
+		src/main.c src/utils.c src/net.c src/uevent.c \
+		src/hashlimit.c src/csiphash.c \
 		libpcap.a \
 		$(LDOPTS) \
 		-o pmtud
@@ -51,3 +52,60 @@ distclean: clean
 
 format:
 	clang-format-3.5 -i src/*.c src/*.h
+
+
+# Release process
+# ---------------
+GITVER       := $(shell git describe --tags --always --dirty=-dev)
+VERSION      := $(shell python -c 'print "$(GITVER)"[1:].partition("-")[0]')
+ITERATION    := $(shell python -c 'print ("$(GITVER)"[1:].partition("-")[2] or "0")')
+NEXT_VERSION := v0.$(shell python -c 'print int("$(GITVER)"[1:].partition("-")[0][2:]) + 1')
+
+.PHONY: release
+
+release:
+	@echo "[*] Curr version: $(VERSION)-$(ITERATION)"
+	@echo "[*] Next version: $(NEXT_VERSION)"
+	echo "$(NEXT_VERSION)  (`date '+%Y%m%d-%H%M'`)" > RELEASE_NOTES.tmp
+	git log --reverse --date=short --format="- %ad %s" tags/v$(VERSION)..HEAD >> RELEASE_NOTES.tmp
+	echo "" >> RELEASE_NOTES.tmp
+	cat RELEASE_NOTES >> RELEASE_NOTES.tmp
+	mv RELEASE_NOTES.tmp RELEASE_NOTES
+	git add RELEASE_NOTES
+	git commit -m "Release $(NEXT_VERSION)"
+	git tag $(NEXT_VERSION)
+	@echo "[*] To push the release run:"
+	@echo "git push origin master; git push origin $(NEXT_VERSION)"
+
+# Build process
+# -------------
+
+BIN_PREFIX ?= /usr/local/bin
+
+.PHONY: print-builddeps cf-package
+
+CFDEPENDENCIES = python flex bison valgrind gcc make
+
+print-builddeps:
+	@echo $(CFDEPENDENCIES) $(DEPENDENCIES)
+
+
+cf-package:
+	@echo "[*] resetting submodules"
+	git submodule sync --quiet
+	git submodule update --init --recursive --quiet
+	@echo "[*] rebuilding"
+	-$(MAKE) clean
+	-$(MAKE) distclean
+	$(MAKE) pmtud BUILD=release CC=gcc
+	cp pmtud $(BIN_PREFIX)
+
+	fakeroot fpm -C / \
+		-s dir \
+		-t deb \
+		--deb-compression bzip2 \
+		-v $(VERSION) \
+		--iteration $(ITERATION) \
+		-n pmtud \
+		$(BIN_PREFIX)/pmtud
+	rm $(BIN_PREFIX)/pmtud

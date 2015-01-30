@@ -1,3 +1,7 @@
+// PMTUD
+//
+// Copyright (c) 2015 CloudFlare, Inc.
+
 #include <getopt.h>
 #include <pcap.h>
 #include <signal.h>
@@ -34,6 +38,7 @@ const char *optstring_from_long_options(const struct option *opt)
 	if (osp - optstring >= (int)sizeof(optstring)) {
 		abort();
 	}
+
 	return optstring;
 }
 

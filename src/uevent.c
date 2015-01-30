@@ -1,3 +1,7 @@
+// PMTUD
+//
+// Copyright (c) 2015 CloudFlare, Inc.
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,8 +15,9 @@ struct timespec uevent_now;
 
 struct uevent *uevent_new(struct uevent *uevent)
 {
-	if (!uevent)
+	if (!uevent) {
 		uevent = malloc(sizeof(struct uevent));
+	}
 	memset(uevent, 0, sizeof(struct uevent));
 	uevent->used_slots = 0;
 	uevent->max_fd = 0;

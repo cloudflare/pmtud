@@ -1,3 +1,7 @@
+// PMTUD
+//
+// Copyright (c) 2015 CloudFlare, Inc.
+
 #include <getopt.h>
 #include <pcap.h>
 #include <stdio.h>
@@ -146,4 +150,27 @@ int setup_raw(const char *iface)
 	/* 	PFATAL("fcntl(O_NONBLOCK)"); */
 	/* } */
 	return s;
+}
+
+const char *ip_to_string(const uint8_t *p, int p_len)
+{
+	static char dst[INET6_ADDRSTRLEN + 1];
+	const char *r = NULL;
+
+	if (p_len == 4) {
+		struct in_addr addr;
+		memcpy(&addr, p, 4);
+		r = inet_ntop(AF_INET, &addr, dst, INET6_ADDRSTRLEN);
+	}
+	if (p_len == 16) {
+		struct in6_addr addr;
+		memcpy(&addr, p, 16);
+		r = inet_ntop(AF_INET6, &addr, dst, INET6_ADDRSTRLEN);
+	}
+
+	if (r == NULL) {
+		dst[0] = '?';
+		dst[1] = 0x00;
+	}
+	return dst;
 }
