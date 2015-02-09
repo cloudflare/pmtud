@@ -2,16 +2,17 @@
 //
 // Copyright (c) 2015 CloudFlare, Inc.
 
+#include <errno.h>
 #include <getopt.h>
 #include <pcap.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <signal.h>
-#include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include "hashlimit.h"
 #include "pmtud.h"
@@ -175,7 +176,8 @@ static int handle_packet(struct state *state, const uint8_t *p, int data_len)
 
 	if (state->dry_run == 0) {
 		int r = send(state->raw_sd, pp, data_len, 0);
-		if (r < 0) {
+		/* ENOBUFS happens during IRQ storms okay to ignore */
+		if (r < 0 && errno != ENOBUFS) {
 			PFATAL("send()");
 		}
 	}
