@@ -47,3 +47,6 @@ pcap_t *setup_pcap(const char *iface, const char *bpf_filter, int snap_len,
 void unsetup_pcap(pcap_t *pcap, const char *iface, struct pcap_stat *stats);
 int setup_raw(const char *iface);
 const char *ip_to_string(const uint8_t *p, int p_len);
+
+/* sched.h */
+int taskset(int taskset_cpu);

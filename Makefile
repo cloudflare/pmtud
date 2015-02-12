@@ -33,7 +33,7 @@ all: pmtud
 pmtud: libpcap.a src/*.c src/*.h Makefile
 	$(CC) $(COPTS) \
 		src/main.c src/utils.c src/net.c src/uevent.c \
-		src/hashlimit.c src/csiphash.c \
+		src/hashlimit.c src/csiphash.c src/sched.c \
 		libpcap.a \
 		$(LDOPTS) \
 		-o pmtud
@@ -79,7 +79,6 @@ release:
 
 # Build process
 # -------------
-
 BIN_PREFIX ?= /usr/local/bin
 
 .PHONY: print-builddeps cf-package

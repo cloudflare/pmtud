@@ -44,6 +44,7 @@ static void usage()
 		"(default=%.1f pps)\n"
 		"  --verbose            Print forwarded packets on screen\n"
 		"  --dry-run            Don't inject packets, just dry run\n"
+		"  --cpu                Pin to particular cpu\n"
 		"  --help               Print this message\n"
 		"\n"
 		"Example:\n"
@@ -225,6 +226,7 @@ int main(int argc, char *argv[])
 		{"iface-rate", required_argument, 0, 'r'},
 		{"verbose", no_argument, 0, 'v'},
 		{"dry-run", no_argument, 0, 'd'},
+		{"cpu", required_argument, 0, 'c'},
 		{"help", no_argument, 0, 'h'},
 		{NULL, 0, 0, 0}};
 
@@ -235,6 +237,7 @@ int main(int argc, char *argv[])
 	double iface_rate = IFACE_RATE_PPS;
 	int verbose = 0;
 	int dry_run = 0;
+	int taskset_cpu = -1;
 
 	optind = 1;
 	while (1) {
@@ -285,6 +288,10 @@ int main(int argc, char *argv[])
 			dry_run = 1;
 			break;
 
+		case 'c':
+			taskset_cpu = atoi(optarg);
+			break;
+
 		default:
 			FATAL("Unknown option %c: %s", arg,
 			      str_quote(argv[optind]));
@@ -300,7 +307,14 @@ int main(int argc, char *argv[])
 	}
 
 	if (set_core_dump(1) < 0) {
-		ERRORF("[ ] Failed to enable core dumps");
+		ERRORF("[ ] Failed to enable core dumps\n");
+	}
+
+	if (taskset_cpu > -1) {
+		if (taskset(taskset_cpu)) {
+			ERRORF("[ ] sched_setaffinity(%i): %s\n", taskset_cpu,
+			       strerror(errno));
+		}
 	}
 
 	struct pcap_stat stats = {0, 0, 0};
