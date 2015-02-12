@@ -79,7 +79,9 @@ release:
 
 # Build process
 # -------------
-BIN_PREFIX ?= /usr/local/bin
+BIN_PREFIX   ?= /usr/local/bin
+PACKAGE_ROOT := $(shell pwd)/tmp/packaging
+
 
 .PHONY: print-builddeps cf-package
 
@@ -97,14 +99,15 @@ cf-package:
 	-$(MAKE) clean
 	-$(MAKE) distclean
 	$(MAKE) pmtud BUILD=release CC=gcc
-	cp pmtud $(BIN_PREFIX)
+	-mkdir -p $(PACKAGE_ROOT)/$(BIN_PREFIX)
+	cp pmtud $(PACKAGE_ROOT)/$(BIN_PREFIX)
 
-	fakeroot fpm -C / \
+	fakeroot fpm -C $(PACKAGE_ROOT) \
 		-s dir \
 		-t deb \
 		--deb-compression bzip2 \
 		-v $(VERSION) \
 		--iteration $(ITERATION) \
 		-n pmtud \
-		$(BIN_PREFIX)/pmtud
-	rm $(BIN_PREFIX)/pmtud
+		.
+	rm -rf $(PACKAGE_ROOT)
