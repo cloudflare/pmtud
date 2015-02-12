@@ -1,2 +1,8 @@
+v0.2  (20150212-1720)
+- 2015-02-09 Ignore ENOBUFS on send()
+- 2015-02-12 Add --cpu option to allow pmtud to be pinned to a cpu
+- 2015-02-12 Clearer readme and --help
+- 2015-02-12 Update build process
+
 v0.1  (20150131-0037)
 
