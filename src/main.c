@@ -26,10 +26,10 @@ static void usage()
 	fprintf(stderr,
 		"Usage:\n"
 		"\n"
-		"    pmtud [options] \n"
+		"    pmtud [options]\n"
 		"\n"
 		"Path MTU Daemon is captures and broadcasts ICMP messages "
-		"related to \n"
+		"related to\n"
 		"MTU detection. It listens on an interface, waiting for ICMP "
 		"messages\n"
 		"(IPv4 type 3 code 4 or IPv6 type 2 code 0) and it forwards "
@@ -47,6 +47,11 @@ static void usage()
 		"  --verbose            Print forwarded packets on screen\n"
 		"  --dry-run            Don't inject packets, just dry run\n"
 		"  --cpu                Pin to particular cpu\n"
+		"  --ports              Forward only ICMP packets with "
+		"payload\n"
+		"                       containing L4 source port on this "
+		"list\n"
+		"                       (comma separated)\n"
 		"  --help               Print this message\n"
 		"\n"
 		"Example:\n"
@@ -85,15 +90,18 @@ struct state
 	struct hashlimit *ifaces;
 	int verbose;
 	int dry_run;
+	uint64_t *ports_map;
 };
 
 static int handle_packet(struct state *state, const uint8_t *p, int data_len)
 {
+	const char *reason = "unknown";
+
 	/* assumming DLT_EN10MB */
 
 	/* 14 ethernet, 20 ipv4, 8 icmp, 8 IPv4 on payload */
 	if (data_len < 14 + 20 + 8 + 8) {
-		return 0;
+		return -1;
 	}
 
 	if (p[0] == 0xff && p[1] == 0xff && p[2] == 0xff && p[3] == 0xff &&
@@ -102,7 +110,7 @@ static int handle_packet(struct state *state, const uint8_t *p, int data_len)
 	}
 
 	const uint8_t *hash = NULL;
-	int hash_len;
+	int hash_len = 0;
 
 	int l3_offset = 14;
 	uint16_t eth_type = (((uint16_t)p[12]) << 8) | (uint16_t)p[13];
@@ -111,8 +119,16 @@ static int handle_packet(struct state *state, const uint8_t *p, int data_len)
 		l3_offset = 18;
 	}
 
+	int icmp_offset = -1;
 	int valid = 0;
 	if (eth_type == 0x0800 && (p[l3_offset] & 0xF0) == 0x40) {
+		int l3_hdr_len = (int)(p[l3_offset] & 0x0F) * 4;
+		if (l3_hdr_len < 20) {
+			reason = "IPv4 header invalid length";
+			goto reject;
+		}
+		icmp_offset = l3_offset + l3_hdr_len;
+
 		uint8_t protocol = p[l3_offset + 9];
 		/* header: 20 bytes of IPv4, 8 bytes of ICMP,
 		 * payload: 20 bytes of IPv4, 8 bytes of TCP */
@@ -124,6 +140,8 @@ static int handle_packet(struct state *state, const uint8_t *p, int data_len)
 	}
 
 	if (eth_type == 0x86dd && (p[l3_offset] & 0xF0) == 0x60) {
+		icmp_offset = l3_offset + 40;
+
 		uint8_t protocol = p[l3_offset + 6];
 		/* header, 40 bytes of IPv6, 8 bytes of ICMP
 		 * payload: 32 bytes of IPv6 payload */
@@ -134,8 +152,44 @@ static int handle_packet(struct state *state, const uint8_t *p, int data_len)
 		}
 	}
 
-	if (valid == 0 || hash == NULL || hash_len == 0) {
-		return -1;
+	if (valid == 0 || hash == NULL || hash_len == 0 || icmp_offset < 0) {
+		reason = "Invalid protocol or too short";
+		goto reject;
+	}
+
+	if (state->ports_map) {
+		int payload_offset = icmp_offset + 8;
+		if (data_len < payload_offset + 9) {
+			reason = "Payload too short";
+			goto reject;
+		}
+
+		/* Optimistic parsing: ignore protocol field in ICMP
+		 * payload, ignore IP length, etc. */
+		int l4_offset = -1;
+		switch (p[payload_offset + 8] & 0xF0) {
+		case 0x40:
+			l4_offset = payload_offset +
+				    (int)(p[payload_offset] & 0x0F) * 4;
+			break;
+		case 0x60:
+			l4_offset = payload_offset + 40;
+			break;
+		default:
+			reason = "Invalid ICMP payload";
+			goto reject;
+		}
+
+		if (data_len < l4_offset + 2) {
+			reason = "Too short to read L4 source port";
+			goto reject;
+		}
+		uint16_t l4_sport = ((uint16_t)p[l4_offset]) << 8 |
+				    ((uint16_t)p[l4_offset + 1]);
+		if (bitmap_get(state->ports_map, l4_sport) == 0) {
+			reason = "L4 source port not on whitelist";
+			goto reject;
+		}
 	}
 
 	uint8_t dst_mac[6];
@@ -153,28 +207,21 @@ static int handle_packet(struct state *state, const uint8_t *p, int data_len)
 		pp[6 + i] = dst_mac[i];
 	}
 
-	int sources_ok = hashlimit_touch_hash(state->sources, hash, hash_len);
-	int ifaces_ok = 0;
-	if (sources_ok) {
-		ifaces_ok = hashlimit_touch(state->ifaces, 0);
+	if (!hashlimit_touch_hash(state->sources, hash, hash_len)) {
+		reason = "Ratelimited on source IP";
+		goto reject;
+	}
+	if (!hashlimit_touch(state->ifaces, 0)) {
+		reason = "Ratelimited on outgoing interface";
+		goto reject;
 	}
 
+	reason = "transmitting";
 	if (state->verbose > 2) {
-		printf("%s hashlimits{src=%i if=%i} %s\n",
-		       ip_to_string(hash, hash_len), sources_ok, ifaces_ok,
-		       to_hex(pp, data_len));
-	} else if (state->verbose > 1) {
-		printf("%s hashlimits{src=%i if=%i}\n",
-		       ip_to_string(hash, hash_len), sources_ok, ifaces_ok);
-	}
-
-	if (!sources_ok || !ifaces_ok) {
-		return 0;
-	}
-
-	if (state->verbose == 1) {
-		printf("%s hashlimits{src=%i if=%i}\n",
-		       ip_to_string(hash, hash_len), sources_ok, ifaces_ok);
+		printf("%s %s  %s\n", ip_to_string(hash, hash_len), reason,
+		       to_hex(p, data_len));
+	} else if (state->verbose == 1) {
+		printf("%s %s\n", ip_to_string(hash, hash_len), reason);
 	}
 
 	if (state->dry_run == 0) {
@@ -185,6 +232,16 @@ static int handle_packet(struct state *state, const uint8_t *p, int data_len)
 		}
 	}
 	return 1;
+
+reject:
+	if (state->verbose > 2) {
+		printf("%s %s  %s\n", ip_to_string(hash, hash_len), reason,
+		       to_hex(p, data_len));
+	} else if (state->verbose > 1) {
+		printf("%s %s\n", ip_to_string(hash, hash_len), reason);
+	}
+
+	return -1;
 }
 
 static int handle_pcap(struct uevent *uevent, int sfd, int mask, void *userdata)
@@ -230,6 +287,7 @@ int main(int argc, char *argv[])
 		{"dry-run", no_argument, 0, 'd'},
 		{"cpu", required_argument, 0, 'c'},
 		{"help", no_argument, 0, 'h'},
+		{"ports", required_argument, 0, 'p'},
 		{NULL, 0, 0, 0}};
 
 	const char *optstring = optstring_from_long_options(long_options);
@@ -240,11 +298,11 @@ int main(int argc, char *argv[])
 	int verbose = 0;
 	int dry_run = 0;
 	int taskset_cpu = -1;
+	uint64_t *ports_map = NULL;
 
 	optind = 1;
 	while (1) {
 		int option_index = 0;
-
 		int arg = getopt_long(argc, argv, optstring, long_options,
 				      &option_index);
 		if (arg == -1) {
@@ -281,6 +339,28 @@ int main(int argc, char *argv[])
 				FATAL("Rates must be greater than zero");
 			}
 			break;
+
+		case 'p': {
+			if (ports_map == NULL) {
+				ports_map = bitmap_alloc(65536);
+			}
+			const char **org_ports = parse_argv(optarg, ',');
+			const char **ports = org_ports;
+			for (; ports[0] != NULL; ports++) {
+				errno = 0;
+				char *eptr = NULL;
+				int port = strtol(ports[0], &eptr, 10);
+				if (port < 0 || port > 65535 || errno != 0 ||
+				    (unsigned)(eptr - ports[0]) !=
+					    strlen(ports[0])) {
+					FATAL("Malformed port number value "
+					      "\"%s\".",
+					      ports[0]);
+				}
+				bitmap_set(ports_map, port);
+			}
+			free(org_ports);
+		} break;
 
 		case 'v':
 			verbose++;
@@ -327,6 +407,7 @@ int main(int argc, char *argv[])
 	state.ifaces = hashlimit_alloc(1, iface_rate, iface_rate * 1.9);
 	state.verbose = verbose;
 	state.dry_run = dry_run;
+	state.ports_map = ports_map;
 
 	int pcap_fd = pcap_get_selectable_fd(state.pcap);
 	if (pcap_fd < 0) {
@@ -366,6 +447,9 @@ int main(int argc, char *argv[])
 	close(state.raw_sd);
 	hashlimit_free(state.sources);
 	hashlimit_free(state.ifaces);
+	if (state.ports_map) {
+		bitmap_free(state.ports_map);
+	}
 
 	return 0;
 }

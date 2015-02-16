@@ -40,6 +40,7 @@ int set_core_dump(int enable);
 const char *str_quote(const char *s);
 const char *to_hex(const uint8_t *s, int len);
 int signal_desc(int signal);
+const char **parse_argv(const char *str, char delim);
 
 /* pcap.c */
 pcap_t *setup_pcap(const char *iface, const char *bpf_filter, int snap_len,
@@ -48,5 +49,11 @@ void unsetup_pcap(pcap_t *pcap, const char *iface, struct pcap_stat *stats);
 int setup_raw(const char *iface);
 const char *ip_to_string(const uint8_t *p, int p_len);
 
-/* sched.h */
+/* sched.c */
 int taskset(int taskset_cpu);
+
+/* bitmap.c */
+uint64_t *bitmap_alloc(unsigned bits);
+void bitmap_free(uint64_t *map);
+void bitmap_set(uint64_t *map, unsigned bitno);
+int bitmap_get(uint64_t *map, unsigned bitno);

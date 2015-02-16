@@ -28,6 +28,9 @@ Options:
   --verbose            Print forwarded packets on screen
   --dry-run            Don't inject packets, just dry run
   --cpu                Pin to particular cpu
+  --ports              Forward only ICMP packets with payload
+                       containing L4 source port on this list
+                       (comma separated)
   --help               Print this message
 
 Example:

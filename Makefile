@@ -34,6 +34,7 @@ pmtud: libpcap.a src/*.c src/*.h Makefile
 	$(CC) $(COPTS) \
 		src/main.c src/utils.c src/net.c src/uevent.c \
 		src/hashlimit.c src/csiphash.c src/sched.c \
+		src/bitmap.c \
 		libpcap.a \
 		$(LDOPTS) \
 		-o pmtud
