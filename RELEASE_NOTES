@@ -1,3 +1,6 @@
+v0.3  (20150218-1259)
+- 2015-02-16 Forward packets coming out only from supplied outgoing ports
+
 v0.2  (20150212-1720)
 - 2015-02-09 Ignore ENOBUFS on send()
 - 2015-02-12 Add --cpu option to allow pmtud to be pinned to a cpu
