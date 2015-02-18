@@ -30,6 +30,18 @@
 */
 
 #include <stdint.h>
+#include <string.h>
+
+#define ALIGN_ACCESS
+
+#ifdef ALIGN_ACCESS
+#  define RD32p(_ptr) ({ uint32_t _ret; memcpy(&_ret, _ptr, 4); _ret; })
+#  define RD64p(_ptr) ({ uint64_t _ret; memcpy(&_ret, _ptr, 8); _ret; })
+#else
+#  define RD32p(_ptr) (*((uint32_t*)(_ptr)))
+#  define RD64p(_ptr) (*((uint64_t*)(_ptr)))
+#endif
+
 
 #if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) &&             \
 	__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
@@ -87,7 +99,7 @@ uint64_t siphash24(const void *src, unsigned long src_sz, const char key[16])
 	uint64_t v3 = k1 ^ 0x7465646279746573ULL;
 
 	while (src_sz >= 8) {
-		uint64_t mi = _le64toh(*in);
+		uint64_t mi = _le64toh(RD64p(in));
 		in += 1;
 		src_sz -= 8;
 		v3 ^= mi;
@@ -106,7 +118,7 @@ uint64_t siphash24(const void *src, unsigned long src_sz, const char key[16])
 	case 5:
 		pt[4] = m[4];
 	case 4:
-		*((uint32_t *)&pt[0]) = *((uint32_t *)&m[0]);
+		*((uint32_t *)&pt[0]) = RD32p(&m[0]);
 		break;
 	case 3:
 		pt[2] = m[2];
