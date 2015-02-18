@@ -19,7 +19,7 @@
 #include "uevent.h"
 
 #define IFACE_RATE_PPS 10.0
-#define SRC_RATE_PPS 1.9
+#define SRC_RATE_PPS 1.1
 
 static void usage()
 {
