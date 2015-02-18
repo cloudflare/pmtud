@@ -159,7 +159,7 @@ static int handle_packet(struct state *state, const uint8_t *p, int data_len)
 
 	if (state->ports_map) {
 		int payload_offset = icmp_offset + 8;
-		if (data_len < payload_offset + 9) {
+		if (data_len < payload_offset + 1) {
 			reason = "Payload too short";
 			goto reject;
 		}
@@ -167,7 +167,7 @@ static int handle_packet(struct state *state, const uint8_t *p, int data_len)
 		/* Optimistic parsing: ignore protocol field in ICMP
 		 * payload, ignore IP length, etc. */
 		int l4_offset = -1;
-		switch (p[payload_offset + 8] & 0xF0) {
+		switch (p[payload_offset] & 0xF0) {
 		case 0x40:
 			l4_offset = payload_offset +
 				    (int)(p[payload_offset] & 0x0F) * 4;
