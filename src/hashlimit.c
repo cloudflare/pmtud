@@ -64,7 +64,7 @@ struct hashlimit *hashlimit_alloc(unsigned size, double rate_pps, double burst)
 
 void hashlimit_free(struct hashlimit *hl) { free(hl); }
 
-int hashlimit_touch(struct hashlimit *hl, unsigned idx)
+int hashlimit_check(struct hashlimit *hl, unsigned idx)
 {
 	struct hl_item *item = &hl->items[idx];
 
@@ -77,6 +77,19 @@ int hashlimit_touch(struct hashlimit *hl, unsigned idx)
 		item->credit = hl->credit_max;
 	}
 
+	return item->credit >= hl->touch_cost;
+}
+
+int hashlimit_check_hash(struct hashlimit *hl, const uint8_t *h, int h_len)
+{
+
+	uint64_t hash = siphash24(h, h_len, hl->key);
+	return hashlimit_check(hl, hash % hl->size);
+}
+
+int hashlimit_subtract(struct hashlimit *hl, unsigned idx)
+{
+	struct hl_item *item = &hl->items[idx];
 	if (item->credit >= hl->touch_cost) {
 		item->credit -= hl->touch_cost;
 		return 1;
@@ -84,9 +97,8 @@ int hashlimit_touch(struct hashlimit *hl, unsigned idx)
 	return 0;
 }
 
-int hashlimit_touch_hash(struct hashlimit *hl, const uint8_t *h, int h_len)
+int hashlimit_subtract_hash(struct hashlimit *hl, const uint8_t *h, int h_len)
 {
-
 	uint64_t hash = siphash24(h, h_len, hl->key);
-	return hashlimit_touch(hl, hash % hl->size);
+	return hashlimit_subtract(hl, hash % hl->size);
 }

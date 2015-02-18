@@ -207,14 +207,21 @@ static int handle_packet(struct state *state, const uint8_t *p, int data_len)
 		pp[6 + i] = dst_mac[i];
 	}
 
-	if (!hashlimit_touch_hash(state->sources, hash, hash_len)) {
+	/* Check if the limits will be reached */
+	int limit_src = hashlimit_check_hash(state->sources, hash, hash_len);
+	int limit_iface = hashlimit_check(state->ifaces, 0);
+
+	if (limit_src == 0) {
 		reason = "Ratelimited on source IP";
 		goto reject;
 	}
-	if (!hashlimit_touch(state->ifaces, 0)) {
+	if (limit_iface == 0) {
 		reason = "Ratelimited on outgoing interface";
 		goto reject;
 	}
+
+	hashlimit_subtract_hash(state->sources, hash, hash_len);
+	hashlimit_subtract(state->ifaces, 0);
 
 	reason = "transmitting";
 	if (state->verbose > 2) {
