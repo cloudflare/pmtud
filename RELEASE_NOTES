@@ -1,3 +1,6 @@
+v0.4  (20150218-1504)
+- 2015-02-18 Fix crash due to inappropriate memory allocation in bitmap
+
 v0.3  (20150218-1259)
 - 2015-02-16 Forward packets coming out only from supplied outgoing ports
 
