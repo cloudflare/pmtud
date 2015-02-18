@@ -7,7 +7,7 @@
 
 uint64_t *bitmap_alloc(unsigned bits)
 {
-	uint64_t *map = calloc(1, (bits + 63) / 64);
+	uint64_t *map = calloc(1, sizeof(uint64_t) * (bits + 63) / 64);
 	return map;
 }
 

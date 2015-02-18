@@ -1,5 +1,5 @@
 CC       ?= clang
-LDOPTS   += -Wl,-z,now -Wl,-z,relro -pie -pthread
+LDOPTS   += -Wl,-z,now -Wl,-z,relro -pie
 COPTSWARN = -Wall -Wextra -Wno-unused-parameter -Wpointer-arith -Werror
 COPTSSEC  = -D_FORTIFY_SOURCE=2
 
@@ -16,9 +16,6 @@ endif
 COPTSDEBUG=-g -ggdb -O0
 ifeq ($(BUILD), debugaddress)
 	COPTSDEBUG=-g -ggdb -O0 -fsanitize=address -fsanitize=undefined
-endif
-ifeq ($(BUILD), debugthread)
-	COPTSDEBUG=-g -ggdb -O0 -fsanitize=thread -fsanitize=undefined
 endif
 ifeq ($(BUILD), release)
 	MARCH=-march=corei7
