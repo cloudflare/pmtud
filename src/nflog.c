@@ -121,6 +121,12 @@ try_bind_again:
 		PFATAL("nflog_set_mode");
 	}
 
+	/* Disable netlink timeout, to reduce latency. The units of
+	 * value are 1/100th of second. */
+	if (nflog_set_timeout(n->qh, 0) < 0) {
+		PFATAL("nflog_set_timeout");
+	}
+
 	int fd = nflog_fd(n->h);
 
 	int opt = 1;

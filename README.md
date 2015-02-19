@@ -79,8 +79,15 @@ This will cause `pmtud` to listen to packets from NFLOG and use `eth0`
 to brodcast them if neccesary. Debug by listing this /proc file:
 
     cat /proc/net/netfilter/nfnetlink_log
+    33  32781     0 2 65535      0  1
 
-Where the format of this file is similar to `nfnetling_queue`
-described here:
+Where columns read:
 
-  * https://home.regit.org/netfilter-en/using-nfqueue-and-libnetfilter_queue/
+ * nflog group number of a given queue (16 bits)
+ * peer portid: most likely the pid of process
+ * number of messages buffered on the kernel side
+ * copy mode: 2 for full packet copy
+ * copy range: max packet size
+ * flush timeout in 1/100th of a second
+ * use count
+
