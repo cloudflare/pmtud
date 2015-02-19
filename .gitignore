@@ -2,5 +2,4 @@ lib*.a
 pmtud
 core
 tests/venv
-
-
+pmtud_*.deb

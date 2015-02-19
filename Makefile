@@ -51,7 +51,7 @@ libnetfilter_log.a: deps/libnetfilter_log libnfnetlink.a
 	cp deps/libnetfilter_log/src/.libs/libnetfilter_log.a .
 
 clean:
-	rm -rf pmtud
+	rm -rf pmtud pmtud_*.deb
 
 distclean: clean
 	rm -f lib*.a
