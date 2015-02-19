@@ -35,13 +35,22 @@
 #define ALIGN_ACCESS
 
 #ifdef ALIGN_ACCESS
-#  define RD32p(_ptr) ({ uint32_t _ret; memcpy(&_ret, _ptr, 4); _ret; })
-#  define RD64p(_ptr) ({ uint64_t _ret; memcpy(&_ret, _ptr, 8); _ret; })
+#define RD32p(_ptr)                                                            \
+	({                                                                     \
+		uint32_t _ret;                                                 \
+		memcpy(&_ret, _ptr, 4);                                        \
+		_ret;                                                          \
+	})
+#define RD64p(_ptr)                                                            \
+	({                                                                     \
+		uint64_t _ret;                                                 \
+		memcpy(&_ret, _ptr, 8);                                        \
+		_ret;                                                          \
+	})
 #else
-#  define RD32p(_ptr) (*((uint32_t*)(_ptr)))
-#  define RD64p(_ptr) (*((uint64_t*)(_ptr)))
+#define RD32p(_ptr) (*((uint32_t *)(_ptr)))
+#define RD64p(_ptr) (*((uint64_t *)(_ptr)))
 #endif
-
 
 #if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) &&             \
 	__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
