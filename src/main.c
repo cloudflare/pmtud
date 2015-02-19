@@ -45,6 +45,8 @@ static void usage()
 		"interface "
 		"(default=%.1f pps)\n"
 		"  --verbose            Print forwarded packets on screen\n"
+		"  --strict             Forward only packets with MTU that\n"
+		"                       makes sense, between 576 and 1499\n"
 		"  --dry-run            Don't inject packets, just dry run\n"
 		"  --cpu                Pin to particular cpu\n"
 		"  --ports              Forward only ICMP packets with "
@@ -90,12 +92,15 @@ struct state
 	struct hashlimit *ifaces;
 	int verbose;
 	int dry_run;
+	int strict;
 	uint64_t *ports_map;
 };
 
 static int handle_packet(struct state *state, const uint8_t *p, int data_len)
 {
 	const char *reason = "unknown";
+	int mtu_of_next_hop = -1;
+	int l4_sport = -1;
 
 	/* assumming DLT_EN10MB */
 
@@ -157,6 +162,38 @@ static int handle_packet(struct state *state, const uint8_t *p, int data_len)
 		goto reject;
 	}
 
+	if (data_len < icmp_offset + 8) {
+		reason = "Packet too short";
+		goto reject;
+	}
+
+	if (eth_type == 0x0800 && p[icmp_offset] == 3 &&
+	    p[icmp_offset + 1] == 4) {
+		mtu_of_next_hop = ((uint16_t)p[icmp_offset + 6] << 8) |
+				  ((uint16_t)p[icmp_offset + 7]);
+	}
+	if (eth_type == 0x86dd && p[icmp_offset] == 2 &&
+	    p[icmp_offset + 1] == 0) {
+		mtu_of_next_hop = ((uint32_t)p[icmp_offset + 4] << 24) |
+				  ((uint32_t)p[icmp_offset + 5] << 16) |
+				  ((uint32_t)p[icmp_offset + 6] << 8) |
+				  ((uint32_t)p[icmp_offset + 7]);
+	}
+
+	if (mtu_of_next_hop != -1) {
+		/* Are we talking about PMTU icmp at all? */
+		if (mtu_of_next_hop < 68 || mtu_of_next_hop > 16384) {
+			reason = "MTU of next hop is stupid";
+			goto reject;
+		}
+
+		if (state->strict &&
+		    (mtu_of_next_hop < 576 || mtu_of_next_hop >= 1500)) {
+			reason = "MTU of next hop looks bogus";
+			goto reject;
+		}
+	}
+
 	if (state->ports_map) {
 		int payload_offset = icmp_offset + 8;
 		if (data_len < payload_offset + 1) {
@@ -184,8 +221,8 @@ static int handle_packet(struct state *state, const uint8_t *p, int data_len)
 			reason = "Too short to read L4 source port";
 			goto reject;
 		}
-		uint16_t l4_sport = ((uint16_t)p[l4_offset]) << 8 |
-				    ((uint16_t)p[l4_offset + 1]);
+		l4_sport = ((uint16_t)p[l4_offset] << 8) |
+			   ((uint16_t)p[l4_offset + 1]);
 		if (bitmap_get(state->ports_map, l4_sport) == 0) {
 			reason = "L4 source port not on whitelist";
 			goto reject;
@@ -225,10 +262,12 @@ static int handle_packet(struct state *state, const uint8_t *p, int data_len)
 
 	reason = "transmitting";
 	if (state->verbose > 2) {
-		printf("%s %s  %s\n", ip_to_string(hash, hash_len), reason,
-		       to_hex(p, data_len));
-	} else if (state->verbose == 1) {
-		printf("%s %s\n", ip_to_string(hash, hash_len), reason);
+		printf("%s %s mtu=%i sport=%i  %s\n",
+		       ip_to_string(hash, hash_len), reason, mtu_of_next_hop,
+		       l4_sport, to_hex(p, data_len));
+	} else if (state->verbose) {
+		printf("%s %s mtu=%i sport=%i\n", ip_to_string(hash, hash_len),
+		       reason, mtu_of_next_hop, l4_sport);
 	}
 
 	if (state->dry_run == 0) {
@@ -242,10 +281,12 @@ static int handle_packet(struct state *state, const uint8_t *p, int data_len)
 
 reject:
 	if (state->verbose > 2) {
-		printf("%s %s  %s\n", ip_to_string(hash, hash_len), reason,
-		       to_hex(p, data_len));
+		printf("%s %s mtu=%i sport=%i  %s\n",
+		       ip_to_string(hash, hash_len), reason, mtu_of_next_hop,
+		       l4_sport, to_hex(p, data_len));
 	} else if (state->verbose > 1) {
-		printf("%s %s\n", ip_to_string(hash, hash_len), reason);
+		printf("%s %s mtu=%i sport=%i\n", ip_to_string(hash, hash_len),
+		       reason, mtu_of_next_hop, l4_sport);
 	}
 
 	return -1;
@@ -295,6 +336,7 @@ int main(int argc, char *argv[])
 		{"cpu", required_argument, 0, 'c'},
 		{"help", no_argument, 0, 'h'},
 		{"ports", required_argument, 0, 'p'},
+		{"strict", no_argument, 0, 't'},
 		{NULL, 0, 0, 0}};
 
 	const char *optstring = optstring_from_long_options(long_options);
@@ -306,6 +348,7 @@ int main(int argc, char *argv[])
 	int dry_run = 0;
 	int taskset_cpu = -1;
 	uint64_t *ports_map = NULL;
+	int strict = 0;
 
 	optind = 1;
 	while (1) {
@@ -339,6 +382,9 @@ int main(int argc, char *argv[])
 				FATAL("Rates must be greater than zero");
 			}
 			break;
+
+		case 't':
+			strict = 1;
 
 		case 'r':
 			iface_rate = atof(optarg);
@@ -413,6 +459,7 @@ int main(int argc, char *argv[])
 	state.sources = hashlimit_alloc(8191, src_rate, src_rate * 1.9);
 	state.ifaces = hashlimit_alloc(1, iface_rate, iface_rate * 1.9);
 	state.verbose = verbose;
+	state.strict = strict;
 	state.dry_run = dry_run;
 	state.ports_map = ports_map;
 
