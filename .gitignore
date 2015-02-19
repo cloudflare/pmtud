@@ -1,4 +1,4 @@
-libpcap.a
+lib*.a
 pmtud
 core
 tests/venv

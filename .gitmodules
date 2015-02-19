@@ -1,3 +1,9 @@
 [submodule "deps/libpcap"]
 	path = deps/libpcap
 	url = https://github.com/the-tcpdump-group/libpcap.git
+[submodule "deps/libnfnetlink"]
+	path = deps/libnfnetlink
+	url = git://git.netfilter.org/libnfnetlink.git
+[submodule "deps/libnetfilter_log"]
+	path = deps/libnetfilter_log
+	url = git://git.netfilter.org/libnetfilter_log.git

@@ -23,16 +23,16 @@ ifeq ($(BUILD), release)
 endif
 
 COPTS+=$(CFLAGS) $(COPTSDEBUG) $(COPTSWARN) $(COPTSSEC) -fPIE \
-	-Ideps/libpcap
+	-Ideps/libpcap -Ideps/libnetfilter_log/include
 
 all: pmtud
 
-pmtud: libpcap.a src/*.c src/*.h Makefile
+pmtud: libpcap.a libnetfilter_log.a libnfnetlink.a src/*.c src/*.h Makefile
 	$(CC) $(COPTS) \
 		src/main.c src/utils.c src/net.c src/uevent.c \
 		src/hashlimit.c src/csiphash.c src/sched.c \
 		src/bitmap.c \
-		libpcap.a \
+		libpcap.a libnetfilter_log.a libnfnetlink.a \
 		$(LDOPTS) \
 		-o pmtud
 
@@ -40,13 +40,24 @@ libpcap.a: deps/libpcap
 	(cd deps/libpcap && ./configure && make)
 	cp deps/libpcap/libpcap.a .
 
+libnfnetlink.a: deps/libnfnetlink
+	(cd deps/libnfnetlink && ./autogen.sh && CFLAGS="-fpic" ./configure --enable-static && make)
+	cp deps/libnfnetlink/src/.libs/libnfnetlink.a .
+
+libnetfilter_log.a: deps/libnetfilter_log libnfnetlink.a
+	(cd deps/libnetfilter_log && ./autogen.sh \
+		&& PKG_CONFIG_PATH=$$PWD/../libnfnetlink CFLAGS="-fpic" ./configure --enable-static \
+		&& make CPPFLAGS=-I$$PWD/../libnfnetlink/include LDFLAGS=-L$$PWD/../libnfnetlink/src/.libs)
+	cp deps/libnetfilter_log/src/.libs/libnetfilter_log.a .
+
 clean:
 	rm -rf pmtud
 
 distclean: clean
-	rm -f *.a *.o
+	rm -f lib*.a
 	-(cd deps/libpcap && make clean && make distclean)
-	-(cd deps/openonload && rm -rf build)
+	-(cd deps/libnfnetlink && make clean && make distclean)
+	-(cd deps/libnetfilter_log && make clean && make distclean)
 
 format:
 	clang-format-3.5 -i src/*.c src/*.h
