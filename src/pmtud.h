@@ -57,3 +57,12 @@ uint64_t *bitmap_alloc(unsigned bits);
 void bitmap_free(uint64_t *map);
 void bitmap_set(uint64_t *map, unsigned bitno);
 int bitmap_get(uint64_t *map, unsigned bitno);
+
+/* nflog.c */
+struct nflog *nflog_alloc(uint16_t group_no, unsigned queue_maxlen,
+			  int (*user_cb)(const uint8_t *buf, unsigned buf_sz,
+					 void *),
+			  void *userdata);
+void nflog_free(struct nflog *n);
+int nflog_get_fd(struct nflog *n);
+int nflog_go_handle(struct nflog *n, const uint8_t *buf, unsigned buf_sz);

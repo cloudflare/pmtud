@@ -31,7 +31,7 @@ pmtud: libpcap.a libnetfilter_log.a libnfnetlink.a src/*.c src/*.h Makefile
 	$(CC) $(COPTS) \
 		src/main.c src/utils.c src/net.c src/uevent.c \
 		src/hashlimit.c src/csiphash.c src/sched.c \
-		src/bitmap.c \
+		src/bitmap.c src/nflog.c \
 		libpcap.a libnetfilter_log.a libnfnetlink.a \
 		$(LDOPTS) \
 		-o pmtud

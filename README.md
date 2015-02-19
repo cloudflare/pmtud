@@ -64,3 +64,23 @@ To test run it in dry-run and verbose mode:
 
     sudo ./pmtud --iface=eth0 --dry-run -v -v -v
 
+
+If you want to use NFLOG interface:
+
+    iptables -I INPUT -i lo -p icmp -m icmp --icmp-type 3/4 --j NFLOG --nflog-group 33
+    ip6tables -I INPUT -i lo -p icmpv6 -m icmpv6 --icmpv6-type 2/0 -j NFLOG --nflog-group 33
+
+You can add `-m pkttype ! --pkt-type broadcast` to be even more
+specific. Then to use the NFLOG api run:
+
+    sudo ./pmtud --iface=eth0 --dry-run -v -v -v --nflog 33
+
+This will cause `pmtud` to listen to packets from NFLOG and use `eth0`
+to brodcast them if neccesary. Debug by listing this /proc file:
+
+    cat /proc/net/netfilter/nfnetlink_log
+
+Where the format of this file is similar to `nfnetling_queue`
+described here:
+
+  * https://home.regit.org/netfilter-en/using-nfqueue-and-libnetfilter_queue/

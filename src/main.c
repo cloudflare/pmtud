@@ -39,6 +39,7 @@ static void usage()
 		"Options:\n"
 		"\n"
 		"  --iface              Network interface to listen on\n"
+		"  --nflog              use given NFLOG group instead of pcap\n"
 		"  --src-rate           Pps limit from single source "
 		"(default=%.1f pss)\n"
 		"  --iface-rate         Pps limit to send on a single "
@@ -87,6 +88,7 @@ static int on_signal(struct uevent *uevent, int sfd, int mask, void *userdata)
 struct state
 {
 	pcap_t *pcap;
+	struct nflog *nflog;
 	int raw_sd;
 	struct hashlimit *sources;
 	struct hashlimit *ifaces;
@@ -96,8 +98,10 @@ struct state
 	uint64_t *ports_map;
 };
 
-static int handle_packet(struct state *state, const uint8_t *p, int data_len)
+static int handle_packet(const uint8_t *p, unsigned data_len, void *userdata)
 {
+	struct state *state = userdata;
+
 	const char *reason = "unknown";
 	int mtu_of_next_hop = -1;
 	int l4_sport = -1;
@@ -117,14 +121,14 @@ static int handle_packet(struct state *state, const uint8_t *p, int data_len)
 	const uint8_t *hash = NULL;
 	int hash_len = 0;
 
-	int l3_offset = 14;
+	unsigned l3_offset = 14;
 	uint16_t eth_type = (((uint16_t)p[12]) << 8) | (uint16_t)p[13];
 	if (eth_type == 0x8100) {
 		eth_type = (((uint16_t)p[16]) << 8) | (uint16_t)p[17];
 		l3_offset = 18;
 	}
 
-	int icmp_offset = -1;
+	unsigned icmp_offset = 0;
 	int valid = 0;
 	if (eth_type == 0x0800 && (p[l3_offset] & 0xF0) == 0x40) {
 		int l3_hdr_len = (int)(p[l3_offset] & 0x0F) * 4;
@@ -157,7 +161,7 @@ static int handle_packet(struct state *state, const uint8_t *p, int data_len)
 		}
 	}
 
-	if (valid == 0 || hash == NULL || hash_len == 0 || icmp_offset < 0) {
+	if (valid == 0 || hash == NULL || hash_len == 0 || icmp_offset == 0) {
 		reason = "Invalid protocol or too short";
 		goto reject;
 	}
@@ -195,7 +199,7 @@ static int handle_packet(struct state *state, const uint8_t *p, int data_len)
 	}
 
 	if (state->ports_map) {
-		int payload_offset = icmp_offset + 8;
+		unsigned payload_offset = icmp_offset + 8;
 		if (data_len < payload_offset + 1) {
 			reason = "Payload too short";
 			goto reject;
@@ -203,7 +207,7 @@ static int handle_packet(struct state *state, const uint8_t *p, int data_len)
 
 		/* Optimistic parsing: ignore protocol field in ICMP
 		 * payload, ignore IP length, etc. */
-		int l4_offset = -1;
+		unsigned l4_offset = 0;
 		switch (p[payload_offset] & 0xF0) {
 		case 0x40:
 			l4_offset = payload_offset +
@@ -305,7 +309,7 @@ static int handle_pcap(struct uevent *uevent, int sfd, int mask, void *userdata)
 		switch (r) {
 		case 1:
 			if (hdr->len == hdr->caplen) {
-				handle_packet(state, data, hdr->caplen);
+				handle_packet(data, hdr->caplen, state);
 			} else {
 				/* Partial caputre */
 			}
@@ -325,10 +329,39 @@ static int handle_pcap(struct uevent *uevent, int sfd, int mask, void *userdata)
 	}
 }
 
+static int handle_nflog(struct uevent *uevent, int n_fd, int mask,
+			void *userdata)
+{
+	struct state *state = userdata;
+
+	while (1) {
+		struct nflog *n = state->nflog;
+		uint8_t buf[4096] __attribute__((aligned));
+
+		int r = recv(n_fd, buf, sizeof(buf), 0);
+		if (r < 0) {
+			if (errno == EWOULDBLOCK) {
+				break;
+			} else if (errno == ENOBUFS) {
+				/* Running behind, ignore */
+			} else {
+				PFATAL("recv()");
+			}
+		}
+
+		nflog_go_handle(n, buf, (unsigned)r);
+		if ((unsigned)r < sizeof(buf)) {
+			break;
+		}
+	}
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	static struct option long_options[] = {
 		{"iface", required_argument, 0, 'i'},
+		{"nflog", required_argument, 0, 'n'},
 		{"src-rate", required_argument, 0, 's'},
 		{"iface-rate", required_argument, 0, 'r'},
 		{"verbose", no_argument, 0, 'v'},
@@ -341,6 +374,7 @@ int main(int argc, char *argv[])
 
 	const char *optstring = optstring_from_long_options(long_options);
 	const char *iface = NULL;
+	int nflog_group = -1;
 
 	double src_rate = SRC_RATE_PPS;
 	double iface_rate = IFACE_RATE_PPS;
@@ -374,6 +408,14 @@ int main(int argc, char *argv[])
 
 		case 'i':
 			iface = optarg;
+			break;
+
+		case 'n':
+			nflog_group = atoi(optarg);
+			if (nflog_group < 0 || nflog_group > 65535) {
+				FATAL("NFLOG group must be within range "
+				      "0..65535");
+			}
 			break;
 
 		case 's':
@@ -413,7 +455,8 @@ int main(int argc, char *argv[])
 				bitmap_set(ports_map, port);
 			}
 			free(org_ports);
-		} break;
+			break;
+		}
 
 		case 'v':
 			verbose++;
@@ -442,7 +485,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (set_core_dump(1) < 0) {
-		ERRORF("[ ] Failed to enable core dumps\n");
+		ERRORF("[ ] Failed to enable core dumps, continuing anyway.\n");
 	}
 
 	if (taskset_cpu > -1) {
@@ -454,35 +497,52 @@ int main(int argc, char *argv[])
 
 	struct pcap_stat stats = {0, 0, 0};
 	struct state state;
-	state.pcap = setup_pcap(iface, BPF_FILTER, SNAPLEN, &stats);
-	state.raw_sd = setup_raw(iface);
+	memset(&state, 0, sizeof(struct state));
 	state.sources = hashlimit_alloc(8191, src_rate, src_rate * 1.9);
-	state.ifaces = hashlimit_alloc(1, iface_rate, iface_rate * 1.9);
+	state.ifaces = hashlimit_alloc(32, iface_rate, iface_rate * 1.9);
 	state.verbose = verbose;
 	state.strict = strict;
 	state.dry_run = dry_run;
 	state.ports_map = ports_map;
+	state.raw_sd = setup_raw(iface);
 
-	int pcap_fd = pcap_get_selectable_fd(state.pcap);
-	if (pcap_fd < 0) {
-		PFATAL("pcap_get_selectable_fd()");
+	struct uevent uevent;
+	uevent_new(&uevent);
+
+	if (nflog_group == -1) {
+		state.pcap = setup_pcap(iface, BPF_FILTER, SNAPLEN, &stats);
+		int pcap_fd = pcap_get_selectable_fd(state.pcap);
+		if (pcap_fd < 0) {
+			PFATAL("pcap_get_selectable_fd()");
+		}
+		uevent_yield(&uevent, pcap_fd, UEVENT_READ, handle_pcap,
+			     &state);
+	} else {
+		state.nflog =
+			nflog_alloc(nflog_group, 128, handle_packet, &state);
+		int nflog_fd = nflog_get_fd(state.nflog);
+		uevent_yield(&uevent, nflog_fd, UEVENT_READ, handle_nflog,
+			     &state);
 	}
 
 	volatile int done = 0;
-	struct uevent uevent;
-	uevent_new(&uevent);
 	uevent_yield(&uevent, signal_desc(SIGINT), UEVENT_READ, on_signal,
 		     (void *)&done);
 	uevent_yield(&uevent, signal_desc(SIGTERM), UEVENT_READ, on_signal,
 		     (void *)&done);
-	uevent_yield(&uevent, pcap_fd, UEVENT_READ, handle_pcap, &state);
+
+	fprintf(stderr, "[*] #%i Started pmtud ", getpid());
+	if (nflog_group == -1) {
+		fprintf(stderr, "pcap on iface=%s ", str_quote(iface));
+	} else {
+		fprintf(stderr, "nflog group %i, send iface=%s ", nflog_group,
+			str_quote(iface));
+	}
 
 	fprintf(stderr,
-		"[*] #%i Started pmtud on %s rates={iface=%.1f pps source=%.1f "
-		"pps}, "
-		"verbose=%i, dry_run=%i\n",
-		getpid(), str_quote(iface), iface_rate, src_rate, verbose,
-		dry_run);
+		"rates={iface=%.1f pps source=%.1f pps}, verbose=%i, "
+		"dry_run=%i\n",
+		iface_rate, src_rate, verbose, dry_run);
 
 	while (done == 0) {
 		struct timeval timeout =
@@ -494,11 +554,16 @@ int main(int argc, char *argv[])
 	}
 	fprintf(stderr, "[*] #%i Quitting\n", getpid());
 
-	unsetup_pcap(state.pcap, iface, &stats);
+	if (nflog_group == -1) {
+		unsetup_pcap(state.pcap, iface, &stats);
+	} else {
+		nflog_free(state.nflog);
+	}
 	fprintf(stderr, "[*] #%i recv=%i drop=%i ifdrop=%i\n", getpid(),
 		stats.ps_recv, stats.ps_drop, stats.ps_ifdrop);
 
 	close(state.raw_sd);
+
 	hashlimit_free(state.sources);
 	hashlimit_free(state.ifaces);
 	if (state.ports_map) {
