@@ -23,7 +23,7 @@ ifeq ($(BUILD), release)
 endif
 
 COPTS+=$(CFLAGS) $(COPTSDEBUG) $(COPTSWARN) $(COPTSSEC) -fPIE \
-	-Ideps/libpcap -Ideps/libnetfilter_log/include
+	-Ideps/libpcap -I deps/libnfnetlink/include -Ideps/libnetfilter_log/include
 
 all: pmtud
 
@@ -94,7 +94,7 @@ PACKAGE_ROOT := $(shell pwd)/tmp/packaging
 
 .PHONY: print-builddeps cf-package
 
-CFDEPENDENCIES = python flex bison valgrind gcc make
+CFDEPENDENCIES = python flex bison gcc make pkg-config
 
 print-builddeps:
 	@echo $(CFDEPENDENCIES) $(DEPENDENCIES)
