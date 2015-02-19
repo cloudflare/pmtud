@@ -1,3 +1,15 @@
+v0.6  (20150219-1309)
+- 2015-02-18 Tweak csiphash to eliminate misaligned reads
+- 2015-02-18 Split the hashlimit into two parts: update and subtraction
+- 2015-02-18 Update again SRC_RATE_PPS, this time reduce to 1.1
+- 2015-02-19 Don't forward messages with MTU of next hop == 0
+- 2015-02-19 nflog: dependencies
+- 2015-02-19 nflog: support --nflog option, as alternative to pcap for receiving
+- 2015-02-19 cosmetic: make format
+- 2015-02-19 Makefile: fix missing build dependencies
+- 2015-02-19 nflog: make sure the messages aren't buffered for default 1 second
+- 2015-02-19 Cosmetic: ignore debs during make
+
 v0.5  (20150218-1754)
 - 2015-02-18 Fix bug with wrong offsets in parsing ICMP payloads
 - 2015-02-18 Bump --src-pps default to 1.9 pps
