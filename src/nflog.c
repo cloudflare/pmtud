@@ -81,7 +81,7 @@ struct nflog *nflog_alloc(uint16_t group_no, unsigned queue_maxlen,
 		PFATAL("nflog_unbind_pf(AF_INET6)");
 	}
 
-	r = nflog_unbind_pf(n->h, AF_INET);
+	r = nflog_bind_pf(n->h, AF_INET);
 	if (r < 0) {
 		PFATAL("nflog_bind_pf(AF_INET)");
 	}
