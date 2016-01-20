@@ -55,6 +55,11 @@ pcap_t *setup_pcap(const char *iface, const char *bpf_filter, int snap_len,
 		      pcap_geterr(pcap));
 	}
 
+	r = pcap_setdirection(pcap, PCAP_D_IN);
+	if (r != 0) {
+		FATAL("pcap_setdirection: %s %d", pcap_geterr(pcap), r);
+	}
+
 	r = pcap_setnonblock(pcap, 1, errbuf);
 	if (r != 0) {
 		FATAL("pcap_setnonblock(%s, 1): %s", str_quote(iface), errbuf);
