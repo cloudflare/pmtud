@@ -55,6 +55,9 @@ static void usage()
 		"                       containing L4 source port on this "
 		"list\n"
 		"                       (comma separated)\n"
+		"  --peers              Resend ICMP packets to this peer "
+		"list\n"
+		"                       (comma separated)\n"
 		"  --help               Print this message\n"
 		"\n"
 		"Example:\n"
@@ -90,12 +93,15 @@ struct state
 	pcap_t *pcap;
 	struct nflog *nflog;
 	int raw_sd;
+	int raw4;
+	int raw6;
 	struct hashlimit *sources;
 	struct hashlimit *ifaces;
 	int verbose;
 	int dry_run;
 	int strict;
 	uint64_t *ports_map;
+	void *peer_list;
 };
 
 static int handle_packet(const uint8_t *p, unsigned data_len, void *userdata)
@@ -105,6 +111,7 @@ static int handle_packet(const uint8_t *p, unsigned data_len, void *userdata)
 	const char *reason = "unknown";
 	int mtu_of_next_hop = -1;
 	int l4_sport = -1;
+	int ttl = -1;
 
 	/* assumming DLT_EN10MB */
 
@@ -145,6 +152,7 @@ static int handle_packet(const uint8_t *p, unsigned data_len, void *userdata)
 			valid = 1;
 			hash = &p[l3_offset + 12];
 			hash_len = 4;
+			ttl = p[l3_offset + 8];
 		}
 	}
 
@@ -158,6 +166,7 @@ static int handle_packet(const uint8_t *p, unsigned data_len, void *userdata)
 			valid = 1;
 			hash = &p[l3_offset + 8];
 			hash_len = 16;
+			ttl = p[l3_offset + 7];
 		}
 	}
 
@@ -233,6 +242,13 @@ static int handle_packet(const uint8_t *p, unsigned data_len, void *userdata)
 		}
 	}
 
+	/* Check if this packet was received from a L3 peer */
+	if (state->peer_list != NULL &&
+	    check_peerlist(state->peer_list, hash, hash_len) == 0) {
+		reason = "Received from L3 peer";
+		goto reject;
+	}
+
 	uint8_t dst_mac[6];
 	memcpy(dst_mac, p, 6);
 
@@ -275,10 +291,17 @@ static int handle_packet(const uint8_t *p, unsigned data_len, void *userdata)
 	}
 
 	if (state->dry_run == 0) {
-		int r = send(state->raw_sd, pp, data_len, 0);
-		/* ENOBUFS happens during IRQ storms okay to ignore */
-		if (r < 0 && errno != ENOBUFS) {
-			PFATAL("send()");
+		if (state->peer_list == NULL) {
+			int r = send(state->raw_sd, pp, data_len, 0);
+			/* ENOBUFS happens during IRQ storms okay to ignore */
+			if (r < 0 && errno != ENOBUFS) {
+				PFATAL("send()");
+			}
+		} else {
+			sendto_peerlist(state->peer_list, state->raw4,
+					state->raw6, hash_len,
+					p + icmp_offset,
+					data_len - icmp_offset, ttl);
 		}
 	}
 	return 1;
@@ -370,6 +393,7 @@ int main(int argc, char *argv[])
 		{"help", no_argument, 0, 'h'},
 		{"ports", required_argument, 0, 'p'},
 		{"strict", no_argument, 0, 't'},
+		{"peers", required_argument, 0, 'P'},
 		{NULL, 0, 0, 0}};
 
 	const char *optstring = optstring_from_long_options(long_options);
@@ -382,6 +406,7 @@ int main(int argc, char *argv[])
 	int dry_run = 0;
 	int taskset_cpu = -1;
 	uint64_t *ports_map = NULL;
+	struct peer *peer_list = NULL;
 	int strict = 0;
 
 	optind = 1;
@@ -458,6 +483,16 @@ int main(int argc, char *argv[])
 			break;
 		}
 
+		case 'P': {
+			const char **addresses = parse_argv(optarg, ',');
+			if (addresses[0] == NULL) {
+				FATAL("Warning peer list passed with -P was empty");
+			}
+			peer_list = make_peerlist(addresses);
+			free(addresses);
+			break;
+		}
+
 		case 'v':
 			verbose++;
 			break;
@@ -504,7 +539,13 @@ int main(int argc, char *argv[])
 	state.strict = strict;
 	state.dry_run = dry_run;
 	state.ports_map = ports_map;
+	state.peer_list = peer_list;
 	state.raw_sd = setup_raw(iface);
+	state.raw4 = -1;
+	state.raw6 = -1;
+	if (peer_list != NULL) {
+		setup_rawipsocket(&state.raw4, &state.raw6);
+	}
 
 	struct uevent uevent;
 	uevent_new(&uevent);
@@ -569,6 +610,7 @@ int main(int argc, char *argv[])
 	if (state.ports_map) {
 		bitmap_free(state.ports_map);
 	}
+	free_peerlist(state.peer_list);
 
 	return 0;
 }

@@ -18,7 +18,9 @@ Usage:
 Path MTU Daemon is captures and broadcasts ICMP messages related to
 MTU detection. It listens on an interface, waiting for ICMP messages
 (IPv4 type 3 code 4 or IPv6 type 2 code 0) and it forwards them
-verbatim to the broadcast ethernet address.
+verbatim normally to the broadcast ethernet address. If a list of peers
+is given then ICMP messages are forwarded using normal routing to these
+peers enabling distribution across different subnets.
 
 Options:
 
@@ -30,6 +32,8 @@ Options:
   --cpu                Pin to particular cpu
   --ports              Forward only ICMP packets with payload
                        containing L4 source port on this list
+                       (comma separated)
+  --peers              Resend ICMP packets to this peer list
                        (comma separated)
   --help               Print this message
 
@@ -46,7 +50,8 @@ Once again, it listens waiting for packets matching:
      (ether dst not ff:ff:ff:ff:ff:ff)
 
 And having appropriate length, and forwards them to ethernet broadcast
-ff:ff:ff:ff:ff:ff.
+ff:ff:ff:ff:ff:ff or using normal packet routing if a list of peers
+is specified.
 
 To debug use tcpdump:
 

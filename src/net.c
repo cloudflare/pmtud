@@ -2,6 +2,7 @@
 //
 // Copyright (c) 2015 CloudFlare, Inc.
 
+#include <errno.h>
 #include <getopt.h>
 #include <pcap.h>
 #include <stdio.h>
@@ -12,10 +13,22 @@
 #include <linux/if_packet.h>
 #include <net/ethernet.h>
 #include <net/if.h>
+#include <netdb.h>
 #include <string.h>
 #include <sys/ioctl.h>
 
 #include "pmtud.h"
+
+#define MAX_PEERS 32
+
+struct peer
+{
+        union {
+                struct sockaddr_in sin;
+                struct sockaddr_in6 sin6;
+        } sa;
+        socklen_t salen;
+};
 
 pcap_t *setup_pcap(const char *iface, const char *bpf_filter, int snap_len,
 		   struct pcap_stat *stats)
@@ -178,4 +191,112 @@ const char *ip_to_string(const uint8_t *p, int p_len)
 		dst[1] = 0x00;
 	}
 	return dst;
+}
+
+void setup_rawipsocket(int *raw4, int *raw6)
+{
+
+	*raw4 = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+	if (*raw4 < 0) {
+		PFATAL("socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)");
+	}
+	*raw6 = socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
+	if (*raw6 < 0) {
+		PFATAL("socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6)");
+	}
+}
+
+struct peer *make_peerlist(const char **addresses)
+{
+	struct addrinfo hints;
+	struct addrinfo *result;
+	struct peer *peer_list;
+	int r;
+	int i;
+
+	peer_list = calloc(MAX_PEERS, sizeof(struct peer));
+	if (peer_list == NULL) {
+		PFATAL("malloc(peer_list)");
+	}
+
+	memset(&hints, 0, sizeof(struct addrinfo));
+	hints.ai_flags = AI_NUMERICHOST;
+	for (i = 0; addresses[0] != NULL; addresses++, i++) {
+		if (i >= MAX_PEERS) {
+			FATAL("Maximum number of peers exceeded %d",
+			      MAX_PEERS);
+		}
+		r = getaddrinfo(addresses[0], NULL, &hints, &result);
+		if (r != 0) {
+			FATAL("Malformed peer address %s", addresses[0]);
+		}
+		if (result->ai_addrlen > sizeof(peer_list[i].sa)) {
+			FATAL("Internal error in address structures");
+		}
+		memcpy(&peer_list[i].sa, result->ai_addr, result->ai_addrlen);
+		peer_list[i].salen = result->ai_addrlen;
+		freeaddrinfo(result);
+	}
+	return peer_list;
+}
+
+void free_peerlist(struct peer *peer_list)
+{
+	free(peer_list);
+}
+
+int check_peerlist(struct peer *peer_list, const uint8_t *p, int p_len)
+{
+	struct peer *peer;
+
+	for (peer = peer_list; peer < peer_list + MAX_PEERS && peer->salen != 0;
+	     peer++) {
+		if (p_len == 4 && peer->sa.sin.sin_family == AF_INET) {
+			if (memcmp(&peer->sa.sin.sin_addr, p, p_len) == 0) {
+				return 0;
+			}
+		} else if (p_len == 16 && peer->sa.sin6.sin6_family == AF_INET6) {
+			if (memcmp(&peer->sa.sin6.sin6_addr, p, p_len) == 0) {
+				return 0;
+			}
+		}
+	}
+	return -1;
+}
+
+void sendto_peerlist(struct peer *peer_list, int raw4, int raw6, int addr_len,
+    const uint8_t *icmppkt, unsigned icmppkt_len, int orig_ttl)
+{
+	struct peer *peer;
+	int family;
+	int r;
+	int ttl;
+
+	if (addr_len == 4) {
+		family = AF_INET;
+	} else if (addr_len == 16) {
+		family = AF_INET6;
+	} else {
+		FATAL("addr_len is neither 4 nor 16");
+	}
+
+	ttl = orig_ttl - 1;
+	if (ttl == 0)
+		return;
+	setsockopt(raw4, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl));
+	setsockopt(raw6, IPPROTO_IPV6, IPV6_UNICAST_HOPS, &ttl,
+		   sizeof(ttl));
+	for (peer = peer_list; peer < peer_list + MAX_PEERS && peer->salen != 0;
+	     peer++) {
+		if (peer->sa.sin.sin_family != family) {
+			continue;
+		}
+		r = sendto((family == AF_INET ? raw4 : raw6),
+			   icmppkt, icmppkt_len, 0, (struct sockaddr *)&peer->sa,
+			   peer->salen);
+		/* ENOBUFS happens during IRQ storms okay to ignore */
+		if (r < 0 && errno != ENOBUFS) {
+			PFATAL("sendto()");
+		}
+	}
 }
