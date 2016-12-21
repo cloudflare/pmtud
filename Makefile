@@ -22,19 +22,18 @@ ifeq ($(BUILD), release)
 	COPTSDEBUG=-g -ggdb -O3 $(MARCH)
 endif
 
-COPTS+=$(CFLAGS) $(COPTSDEBUG) $(COPTSWARN) $(COPTSSEC) -fPIE \
-	-Ideps/libpcap -I deps/libnfnetlink/include -Ideps/libnetfilter_log/include
+COPTS+=$(CFLAGS) $(COPTSDEBUG) $(COPTSWARN) $(COPTSSEC) -fPIE
 
 all: pmtud
 
-pmtud: libpcap.a libnetfilter_log.a libnfnetlink.a src/*.c src/*.h Makefile
+pmtud: src/*.c src/*.h Makefile
 	$(CC) $(COPTS) \
 		src/main.c src/utils.c src/net.c src/uevent.c \
 		src/hashlimit.c src/csiphash.c src/sched.c \
 		src/bitmap.c src/nflog.c \
-		libpcap.a libnetfilter_log.a libnfnetlink.a \
 		$(LDOPTS) \
-		-o pmtud
+		-o pmtud \
+		-lpcap -lnfnetlink -lnetfilter_log
 
 libpcap.a: deps/libpcap
 	(cd deps/libpcap && ./configure && make)

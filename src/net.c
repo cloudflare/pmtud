@@ -29,9 +29,9 @@ pcap_t *setup_pcap(const char *iface, const char *bpf_filter, int snap_len,
 
 	int r;
 
-	r = pcap_set_tstamp_type(pcap, PCAP_TSTAMP_ADAPTER_UNSYNCED);
+	r = pcap_set_tstamp_type(pcap, PCAP_TSTAMP_HOST);
 	if (r != 0) {
-		pcap_set_tstamp_type(pcap, PCAP_TSTAMP_ADAPTER);
+		FATAL("pcap_set_tstamp_type: %s", pcap_geterr(pcap));
 	}
 
 	r = pcap_set_promisc(pcap, 0);
