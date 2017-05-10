@@ -56,8 +56,7 @@ To debug use tcpdump:
 
 To build type:
 
-    git submodule update --init --recursive
-    make
+    ./autogen.sh && ./configure && make
 
 
 To test run it in dry-run and verbose mode:
