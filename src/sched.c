@@ -2,7 +2,6 @@
 //
 // Copyright (c) 2015 CloudFlare, Inc.
 
-#define _GNU_SOURCE
 #include <sched.h>
 
 int taskset(int taskset_cpu)
