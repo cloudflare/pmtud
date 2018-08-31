@@ -427,6 +427,7 @@ int main(int argc, char *argv[])
 
 		case 't':
 			strict = 1;
+			break;
 
 		case 'r':
 			iface_rate = atof(optarg);
