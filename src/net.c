@@ -127,7 +127,7 @@ int setup_raw(const char *iface)
 
 	struct ifreq s_ifr;
 	memset(&s_ifr, 0, sizeof(s_ifr));
-	strncpy(s_ifr.ifr_name, iface, sizeof(s_ifr.ifr_name));
+	strncpy(s_ifr.ifr_name, iface, sizeof(s_ifr.ifr_name) - 1);
 	r = ioctl(s, SIOCGIFINDEX, &s_ifr);
 	if (r != 0) {
 		PFATAL("ioctl(SIOCGIFINDEX, %s)", str_quote(iface));
