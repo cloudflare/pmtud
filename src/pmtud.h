@@ -43,11 +43,18 @@ int signal_desc(int signal);
 const char **parse_argv(const char *str, char delim);
 
 /* pcap.c */
+struct peer;
 pcap_t *setup_pcap(const char *iface, const char *bpf_filter, int snap_len,
 		   struct pcap_stat *stats);
 void unsetup_pcap(pcap_t *pcap, const char *iface, struct pcap_stat *stats);
 int setup_raw(const char *iface);
 const char *ip_to_string(const uint8_t *p, int p_len);
+void setup_rawipsocket(int *raw4, int *raw6);
+struct peer *make_peerlist(const char **addresses);
+void free_peerlist(struct peer *peer_list);
+int check_peerlist(struct peer *peer_list, const uint8_t *p, int p_len);
+void sendto_peerlist(struct peer *peer_list, int raw4, int raw6, int addr_len,
+    const uint8_t *icmppkt, unsigned icmppkt_len, int orig_ttl);
 
 /* sched.c */
 int taskset(int taskset_cpu);
