@@ -49,7 +49,7 @@ static void usage()
 		"  --strict             Forward only packets with MTU that\n"
 		"                       makes sense, between 576 and 1499\n"
 		"  --use-src            Use source MAC of original packet\n"
-                "                       as a src of forwarded packet\n"
+		"                       as a src of forwarded packet\n"
 		"  --dry-run            Don't inject packets, just dry run\n"
 		"  --cpu                Pin to particular cpu\n"
 		"  --ports              Forward only ICMP packets with "
