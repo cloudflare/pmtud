@@ -48,6 +48,8 @@ static void usage()
 		"  --verbose            Print forwarded packets on screen\n"
 		"  --strict             Forward only packets with MTU that\n"
 		"                       makes sense, between 576 and 1499\n"
+		"  --use-src            Use source MAC of original packet\n"
+		"                       as a src of forwarded packet\n"
 		"  --dry-run            Don't inject packets, just dry run\n"
 		"  --cpu                Pin to particular cpu\n"
 		"  --ports              Forward only ICMP packets with "
@@ -95,6 +97,7 @@ struct state
 	int verbose;
 	int dry_run;
 	int strict;
+	int use_src;
 	uint64_t *ports_map;
 };
 
@@ -233,9 +236,16 @@ static int handle_packet(const uint8_t *p, unsigned data_len, void *userdata)
 		}
 	}
 
-	uint8_t dst_mac[6];
-	memcpy(dst_mac, p, 6);
-
+	uint8_t src_mac[6];
+	if (state->use_src == 1) {
+	  // Use src of original pkt as a src_mac for forwarded pkt
+	  // Used when pmtud is running on a router that sends PMTU pkts
+	  memcpy(src_mac, p+6, 6);
+	} else {
+	  // Use dst of original pkt as a src_mac for forwarded pkt
+	  // Used when pmtud is running on a lbs that receives PMTU pkts
+	  memcpy(src_mac, p, 6);
+	}
 	/* alright, write there anyway */
 	uint8_t *pp = (uint8_t *)p;
 
@@ -245,7 +255,7 @@ static int handle_packet(const uint8_t *p, unsigned data_len, void *userdata)
 	}
 
 	for (i = 0; i < 6; i++) {
-		pp[6 + i] = dst_mac[i];
+		pp[6 + i] = src_mac[i];
 	}
 
 	/* Check if the limits will be reached */
@@ -370,6 +380,7 @@ int main(int argc, char *argv[])
 		{"help", no_argument, 0, 'h'},
 		{"ports", required_argument, 0, 'p'},
 		{"strict", no_argument, 0, 't'},
+		{"use-src", no_argument, 0, 'S'},
 		{NULL, 0, 0, 0}};
 
 	const char *optstring = optstring_from_long_options(long_options);
@@ -383,6 +394,7 @@ int main(int argc, char *argv[])
 	int taskset_cpu = -1;
 	uint64_t *ports_map = NULL;
 	int strict = 0;
+	int use_src = 0;
 
 	optind = 1;
 	while (1) {
@@ -427,6 +439,10 @@ int main(int argc, char *argv[])
 
 		case 't':
 			strict = 1;
+			break;
+
+		case 'S':
+			use_src = 1;
 			break;
 
 		case 'r':
@@ -503,6 +519,7 @@ int main(int argc, char *argv[])
 	state.ifaces = hashlimit_alloc(32, iface_rate, iface_rate * 1.9);
 	state.verbose = verbose;
 	state.strict = strict;
+	state.use_src = use_src;
 	state.dry_run = dry_run;
 	state.ports_map = ports_map;
 	state.raw_sd = setup_raw(iface);
