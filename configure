@@ -1,0 +1,13 @@
+#!/bin/sh
+
+if [ $# -ne 0 ]; then
+	meson configure build
+	echo ''
+	echo 'Configuration can be changed like this:'
+	echo '  meson configure build -Dprefix=/tmp/foobar'
+	echo '  More info: http://mesonbuild.com/Configuring-a-build-directory.html'
+	# See also: http://mesonbuild.com/howtox.html
+	exit 1
+fi
+meson build
+exit $?
