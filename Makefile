@@ -37,7 +37,7 @@ pmtud: libpcap.a libnetfilter_log.a libnfnetlink.a src/*.c src/*.h Makefile
 		-o pmtud
 
 libpcap.a: deps/libpcap
-	(cd deps/libpcap && ./configure && make)
+	(cd deps/libpcap && ./configure --enable-usb=no --enable-bluetooth=no --enable-canusb=no --enable-can=no --enable-dbus=no --without-libnl && make)
 	cp deps/libpcap/libpcap.a .
 
 libnfnetlink.a: deps/libnfnetlink
