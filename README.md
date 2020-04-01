@@ -15,7 +15,7 @@ Usage:
 
     pmtud [options]
 
-Path MTU Daemon is captures and broadcasts ICMP messages related to
+Path MTU Daemon captures and broadcasts ICMP messages related to
 MTU detection. It listens on an interface, waiting for ICMP messages
 (IPv4 type 3 code 4 or IPv6 type 2 code 0) and it forwards them
 verbatim to the broadcast ethernet address.
