@@ -66,9 +66,9 @@ format:
 # Release process
 # ---------------
 GITVER       := $(shell git describe --tags --always --dirty=-dev)
-VERSION      := $(shell python -c 'print "$(GITVER)"[1:].partition("-")[0]')
-ITERATION    := $(shell python -c 'print ("$(GITVER)"[1:].partition("-")[2] or "0")')
-NEXT_VERSION := v0.$(shell python -c 'print int("$(GITVER)"[1:].partition("-")[0][2:]) + 1')
+VERSION      := $(shell python3 -c 'print("$(GITVER)"[1:].partition("-")[0])')
+ITERATION    := $(shell python3 -c 'print(("$(GITVER)"[1:].partition("-")[2] or "0"))')
+NEXT_VERSION := v0.$(shell python3 -c 'print(int("$(GITVER)"[1:].partition("-")[0][2:]) + 1)')
 
 .PHONY: release
 
