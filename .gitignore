@@ -1,5 +1,2 @@
-lib*.a
-pmtud
-core
-tests/venv
-pmtud_*.deb
+/build
+/pmtud_*.deb
